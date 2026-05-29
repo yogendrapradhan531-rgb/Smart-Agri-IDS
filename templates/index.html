@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart Agri-IDS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #0d0f12;
+    --bg2:     #13161b;
+    --bg3:     #1a1e26;
+    --border:  rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text:    #e8eaf0;
+    --muted:   #6b7280;
+    --green:   #22c55e;
+    --red:     #ef4444;
+    --amber:   #f59e0b;
+    --blue:    #3b82f6;
+    --mono:    'JetBrains Mono', monospace;
+    --sans:    'Syne', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-pulse {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 3px rgba(34,197,94,.18);
+    transition: background .3s, box-shadow .3s;
+  }
+  .logo-pulse.threat {
+    background: var(--red);
+    box-shadow: 0 0 0 3px rgba(239,68,68,.2);
+    animation: blink 0.7s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .logo-text { font-size: 15px; font-weight: 800; letter-spacing: -.02em; }
+  .logo-sub  { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .badge {
+    font-family: var(--mono); font-size: 10px; padding: 4px 10px;
+    border-radius: 5px; border: 1px solid var(--border2);
+    background: rgba(34,197,94,.1); color: var(--green);
+    transition: all .3s;
+  }
+  .badge.threat  { background: rgba(239,68,68,.12); color: var(--red); border-color: rgba(239,68,68,.25); }
+  .badge.paused  { background: rgba(107,114,128,.12); color: var(--muted); border-color: var(--border); }
+  .badge.demo    { background: rgba(245,158,11,.1); color: var(--amber); border-color: rgba(245,158,11,.25); }
+  #clock { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  /* ── LAYOUT ── */
+  .layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 57px); }
+
+  /* ── SIDEBAR ── */
+  aside {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .section-label {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    letter-spacing: .1em; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .metric-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .metric-label { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+  .metric-value { font-size: 26px; font-weight: 800; letter-spacing: -.03em; }
+  .metric-value.green { color: var(--green); }
+  .metric-value.red   { color: var(--red); }
+  .metric-value.amber { color: var(--amber); }
+  .metric-value.blue  { color: var(--blue); }
+
+  /* threat ratio bar */
+  .ratio-bar {
+    height: 6px; border-radius: 3px;
+    background: var(--bg3); overflow: hidden;
+    margin-top: 10px;
+  }
+  .ratio-fill { height: 100%; background: var(--red); border-radius: 3px; transition: width .4s; }
+
+  /* controls */
+  .btn {
+    width: 100%; padding: 9px 14px;
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    border-radius: 8px; border: 1px solid var(--border2);
+    background: transparent; color: var(--text);
+    cursor: pointer; margin-bottom: 6px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background .15s, border-color .15s;
+  }
+  .btn:hover { background: var(--bg3); border-color: rgba(255,255,255,.18); }
+  .btn.start { background: rgba(34,197,94,.1); color: var(--green); border-color: rgba(34,197,94,.3); }
+  .btn.start:hover { background: rgba(34,197,94,.18); }
+  .btn.stop  { background: rgba(239,68,68,.1); color: var(--red); border-color: rgba(239,68,68,.3); }
+  .btn.stop:hover  { background: rgba(239,68,68,.18); }
+
+  /* class rank */
+  .rank-item {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px; margin-bottom: 6px;
+  }
+  .rank-bar-bg  { flex: 1; height: 4px; background: var(--bg3); border-radius: 2px; }
+  .rank-bar-fill { height: 100%; border-radius: 2px; background: var(--red); transition: width .5s; }
+  .rank-bar-fill.normal { background: var(--green); }
+  .rank-label  { min-width: 100px; color: var(--muted); font-size: 10px; }
+  .rank-count  { min-width: 30px; text-align: right; color: var(--text); }
+
+  /* ── MAIN CONTENT ── */
+  main { padding: 20px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-title { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+
+  /* log */
+  .log-container {
+    height: 240px; overflow-y: auto;
+    font-family: var(--mono); font-size: 11.5px;
+    padding: 8px; scroll-behavior: smooth;
+  }
+  .log-container::-webkit-scrollbar { width: 4px; }
+  .log-container::-webkit-scrollbar-track { background: transparent; }
+  .log-container::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .log-row {
+    display: grid;
+    grid-template-columns: 48px 56px 1fr 60px;
+    gap: 8px; align-items: center;
+    padding: 3px 8px; border-radius: 5px;
+  }
+  .log-row:hover { background: var(--bg3); }
+  .log-idx   { color: var(--muted); }
+  .log-act   { font-weight: 700; }
+  .log-act.pass { color: var(--green); }
+  .log-act.block { color: var(--red); }
+  .log-name  { color: var(--text); }
+  .log-lat   { color: var(--muted); text-align: right; }
+
+  /* charts row */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .chart-wrap { padding: 12px 16px; position: relative; }
+
+  /* alert banner */
+  #alertBanner {
+    display: none;
+    background: rgba(239,68,68,.1);
+    border: 1px solid rgba(239,68,68,.25);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-family: var(--mono); font-size: 12px; color: var(--red);
+    animation: slideIn .3s ease;
+  }
+  @keyframes slideIn { from{transform:translateY(-8px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+  /* status dot in log */
+  .dot { width:6px; height:6px; border-radius:50%; display:inline-block; }
+  .dot.green { background: var(--green); }
+  .dot.red   { background: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">
+    <div class="logo-pulse" id="logoPulse"></div>
+    <div>
+      <div class="logo-text">Smart Agri-IDS</div>
+      <div class="logo-sub">BiGRU-LSTM &nbsp;·&nbsp; DNN-EdgeIIoT &nbsp;·&nbsp; v2.4</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="badge paused" id="sysBadge">IDLE</span>
+    <span class="badge demo" id="modeBadge" style="display:none">DEMO MODE</span>
+    <span id="clock">--:--:--</span>
+  </div>
+</header>
+
+<!-- ── BODY ── -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside>
+    <div>
+      <div class="section-label">System Metrics</div>
+      <div class="metric-card">
+        <div class="metric-label">Total Packets</div>
+        <div class="metric-value blue" id="mTotal">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Normal Traffic</div>
+        <div class="metric-value green" id="mNormal">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Threats Blocked</div>
+        <div class="metric-value red" id="mThreats">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Avg Inference Latency</div>
+        <div class="metric-value amber" id="mLatency">0.0 ms</div>
+      </div>
+      <div style="padding: 4px 2px;">
+        <div class="metric-label" style="margin-bottom:6px;">Threat Ratio</div>
+        <div class="ratio-bar"><div class="ratio-fill" id="ratioFill" style="width:0%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px;">
+          <span id="ratioLabel">0%</span>
+          <span>threat rate</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Controls</div>
+      <button class="btn start" id="btnStart" onclick="ctrlStart()">&#9654; START SCAN</button>
+      <button class="btn stop"  id="btnStop"  onclick="ctrlStop()"  style="display:none">&#9632; STOP SCAN</button>
+      <button class="btn"                     onclick="ctrlReset()">&#8635; RESET</button>
+    </div>
+
+    <div style="flex:1;">
+      <div class="section-label">Top Attack Classes</div>
+      <div id="rankList"></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main>
+
+    <div id="alertBanner">⚠ THREAT DETECTED — Malicious packet blocked by gateway</div>
+
+    <!-- Live log -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Live Packet Feed</span>
+        <button class="btn" onclick="clearLog()" style="width:auto;padding:4px 10px;font-size:10px;margin:0;">Clear</button>
+      </div>
+      <div class="log-container" id="logBox"></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-row">
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Normal vs Threat</span></div>
+        <div class="chart-wrap" style="height:220px;">
+          <canvas id="donutChart" role="img" aria-label="Donut chart showing normal vs threat packet ratio">No data yet.</canvas>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Attack Class Distribution</span></div>
+        <div class="chart-wrap" style="height:220px;">
+          <canvas id="barChart" role="img" aria-label="Bar chart of detected attack classes">No data yet.</canvas>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const CLASS_NAMES = {{ class_names | tojson }};
+let donutChart, barChart, evtSource;
+let lastThreat = 0;
+
+// ── Clock ──
+function tick() {
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    [d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');
+}
+setInterval(tick, 1000); tick();
+
+// ── Init charts ──
+function initCharts() {
+  const dCtx = document.getElementById('donutChart').getContext('2d');
+  donutChart = new Chart(dCtx, {
+    type: 'doughnut',
+    data: { labels:['Normal','Threat'], datasets:[{ data:[0,0],
+      backgroundColor:['#22c55e','#ef4444'], borderWidth:0, hoverOffset:6 }] },
+    options: { responsive:true, maintainAspectRatio:false, cutout:'72%',
+      plugins:{ legend:{ display:false } } }
+  });
+
+  const bCtx = document.getElementById('barChart').getContext('2d');
+  barChart = new Chart(bCtx, {
+    type: 'bar',
+    data: { labels: CLASS_NAMES,
+      datasets:[{ data: CLASS_NAMES.map(()=>0),
+        backgroundColor: CLASS_NAMES.map((_,i)=> i===0?'#22c55e':'#ef4444'),
+        borderWidth:0, borderRadius:3 }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales: {
+        x:{ ticks:{ font:{family:'JetBrains Mono',size:9}, color:'#6b7280',
+              maxRotation:45, autoSkip:false },
+            grid:{ display:false }, border:{ display:false } },
+        y:{ ticks:{ font:{family:'JetBrains Mono',size:10}, color:'#6b7280' },
+            grid:{ color:'rgba(255,255,255,0.05)' }, border:{ display:false } }
+      }
+    }
+  });
+}
+
+// ── Update UI from SSE event ──
+function applyEvent(e) {
+  if (e.ping) return;
+
+  // Metrics
+  document.getElementById('mTotal').textContent   = e.total;
+  document.getElementById('mNormal').textContent  = e.normal;
+  document.getElementById('mThreats').textContent = e.threats;
+  document.getElementById('mLatency').textContent = e.avg_lat.toFixed(1) + ' ms';
+
+  const ratio = e.total > 0 ? Math.round((e.threats / e.total) * 100) : 0;
+  document.getElementById('ratioFill').style.width = ratio + '%';
+  document.getElementById('ratioLabel').textContent = ratio + '%';
+
+  // Log row
+  addLogRow(e.idx, e.threat, e.name, e.lat);
+
+  // Alert banner
+  if (e.threat && e.threats > lastThreat) {
+    lastThreat = e.threats;
+    flashAlert();
+  }
+
+  // Header badge + pulse
+  const badge = document.getElementById('sysBadge');
+  const pulse = document.getElementById('logoPulse');
+  if (e.threats > 0) {
+    badge.className = 'badge threat'; badge.textContent = 'THREAT DETECTED';
+    pulse.className = 'logo-pulse threat';
+  } else {
+    badge.className = 'badge'; badge.textContent = 'SCANNING';
+    pulse.className = 'logo-pulse';
+  }
+
+  // Charts (every 5 packets)
+  if (e.total % 5 === 0) {
+    donutChart.data.datasets[0].data = [e.normal, e.threats];
+    donutChart.update('none');
+    barChart.data.datasets[0].data = CLASS_NAMES.map(n => e.class_counts[n] || 0);
+    barChart.update('none');
+  }
+
+  // Rank list (every 10)
+  if (e.total % 10 === 0) updateRankList(e.class_counts, e.total);
+}
+
+// ── Log ──
+function addLogRow(idx, threat, name, lat) {
+  const box = document.getElementById('logBox');
+  const row = document.createElement('div');
+  row.className = 'log-row';
+  row.innerHTML =
+    `<span class="log-idx">#${String(idx).padStart(4,'0')}</span>` +
+    `<span class="log-act ${threat?'block':'pass'}">${threat?'BLOCK':'PASS'}</span>` +
+    `<span class="log-name">${name}</span>` +
+    `<span class="log-lat">${lat.toFixed(1)}ms</span>`;
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+  if (box.children.length > 150) box.removeChild(box.firstChild);
+}
+function clearLog() { document.getElementById('logBox').innerHTML = ''; }
+
+// ── Alert banner ──
+let alertTimer;
+function flashAlert() {
+  const b = document.getElementById('alertBanner');
+  b.style.display = 'block';
+  clearTimeout(alertTimer);
+  alertTimer = setTimeout(() => { b.style.display = 'none'; }, 3000);
+}
+
+// ── Rank list ──
+function updateRankList(counts, total) {
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0, 8);
+  const max    = sorted[0]?.[1] || 1;
+  const html   = sorted.map(([name, cnt]) => {
+    const pct  = Math.round((cnt / max) * 100);
+    const isN  = name === 'Normal';
+    return `<div class="rank-item">
+      <span class="rank-label">${name}</span>
+      <div class="rank-bar-bg"><div class="rank-bar-fill${isN?' normal':''}" style="width:${pct}%"></div></div>
+      <span class="rank-count">${cnt}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('rankList').innerHTML = html;
+}
+
+// ── Controls ──
+function ctrlStart() {
+  fetch('/api/start', {method:'POST'})
+    .then(() => {
+      document.getElementById('btnStart').style.display = 'none';
+      document.getElementById('btnStop').style.display  = 'flex';
+      if (!donutChart) initCharts();
+      startSSE();
+    });
+}
+function ctrlStop() {
+  fetch('/api/stop', {method:'POST'})
+    .then(() => {
+      document.getElementById('btnStart').style.display = 'flex';
+      document.getElementById('btnStop').style.display  = 'none';
+      document.getElementById('sysBadge').className = 'badge paused';
+      document.getElementById('sysBadge').textContent = 'PAUSED';
+      document.getElementById('logoPulse').className = 'logo-pulse';
+      if (evtSource) { evtSource.close(); evtSource = null; }
+    });
+}
+function ctrlReset() {
+  ctrlStop();
+  fetch('/api/reset', {method:'POST'}).then(() => {
+    clearLog();
+    ['mTotal','mNormal','mThreats'].forEach(id => document.getElementById(id).textContent = '0');
+    document.getElementById('mLatency').textContent = '0.0 ms';
+    document.getElementById('ratioFill').style.width = '0%';
+    document.getElementById('ratioLabel').textContent = '0%';
+    document.getElementById('rankList').innerHTML = '';
+    document.getElementById('sysBadge').className = 'badge paused';
+    document.getElementById('sysBadge').textContent = 'IDLE';
+    lastThreat = 0;
+    if (donutChart) { donutChart.data.datasets[0].data=[0,0]; donutChart.update(); }
+    if (barChart)   { barChart.data.datasets[0].data=CLASS_NAMES.map(()=>0); barChart.update(); }
+  });
+}
+
+// ── SSE ──
+function startSSE() {
+  if (evtSource) evtSource.close();
+  evtSource = new EventSource('/api/stream');
+  evtSource.onmessage = ev => {
+    try { applyEvent(JSON.parse(ev.data)); } catch(_) {}
+  };
+  evtSource.onerror = () => {
+    setTimeout(() => { if (evtSource) startSSE(); }, 2000);
+  };
+}
+
+// ── On load: check mode ──
+fetch('/api/status').then(r=>r.json()).then(s => {
+  if (s.demo_mode) document.getElementById('modeBadge').style.display = 'inline-block';
+  initCharts();
+});
+</script>
+</body>
+</html>
